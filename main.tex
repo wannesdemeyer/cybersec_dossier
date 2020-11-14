@@ -1,0 +1,72 @@
+\documentclass[12pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[a4paper, margin=2.5cm]{geometry}
+\usepackage{ragged2e}
+\usepackage{xcolor}
+\usepackage{wrapfig}
+\usepackage{graphicx}
+\usepackage{charter}
+\usepackage{microtype}
+\usepackage{listings}
+\usepackage{hyperref}
+\usepackage{parskip}
+
+\usepackage{subfiles}
+
+\setlength{\parindent}{0pt} % disable paragraph indent
+
+\graphicspath{ {images/}{../images/} } % define image directory
+
+%\renewcommand*\contentsname{Inhoud} % change table of contents name
+
+\renewcommand{\baselinestretch}{1.3}
+
+\lstset{columns=fullflexible,basicstyle=\ttfamily,backgroundcolor = \color{lightgray}, framexleftmargin = 1em}
+
+\begin{document}
+
+\begin{titlepage}
+  \begin{center}
+    \vspace*{5cm}
+    \textbf{\Huge{CTF based on HackTheBox}}
+    \\
+    \Large{Group 5}
+    
+    \hfill
+    
+    \large{Wannes De Meyer}\\
+    \large{Jonathan R. De Loght}\\
+    \large{Nikolai Romanov}\\
+    \large{Robbe Dumont}\\
+    \large{Boyan Vrebac}
+    
+    \vfill
+    
+    \includegraphics[width=0.5\linewidth]{kdglogo}
+  \end{center}
+\end{titlepage}
+
+\pagenumbering{gobble}
+\tableofcontents
+\newpage
+\pagenumbering{arabic}
+
+\subfile{sections/introduction}
+
+\newpage
+\subfile{sections/htb_boyan} % Hack The Box Boyan
+
+\newpage
+\subfile{sections/htb_wannes} % Hack The Box Boyan
+
+\newpage
+\subfile{sections/htb_nikolai} % Hack The Box Boyan
+
+\newpage
+\subfile{sections/htb_robbe} % Hack The Box Boyan
+
+\newpage
+\subfile{sections/htb_jonathan} % Hack The Box Boyan
+
+\end{document}
